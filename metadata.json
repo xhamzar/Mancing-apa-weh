@@ -1,5 +1,5 @@
 {
-  "name": "Mancing V2",
-  "description": "A high-quality 3D fishing game with RPG elements, missions, and a fishing minigame.",
+  "name": "Mancing V2 (Clean)",
+  "description": "A high-quality 3D fishing game using OBJ models. Source code located in src/ folder.",
   "requestFramePermissions": []
 }

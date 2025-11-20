@@ -1,8 +1,8 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React from 'react';
 import { RotateCcw, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
-  children?: ReactNode;
+  children?: React.ReactNode;
 }
 
 interface State {
@@ -20,7 +20,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("Game Crash Caught:", error, errorInfo);
   }
 
