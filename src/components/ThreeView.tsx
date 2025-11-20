@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { Water } from 'three/examples/jsm/objects/Water.js';
@@ -13,7 +14,7 @@ import { BobberController } from './BobberController';
 import { WeatherController } from './WeatherController';
 import { FishingSpotController } from './FishingSpotController';
 import { WeatherType, BoatType, RodSkinType, FishType } from '../types';
-import { generateFishModel } from './FishModels';
+import { loadFishModel } from './FishModels'; // Updated import
 
 interface ThreeViewProps {
   rodLevel: number;
@@ -37,6 +38,7 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
   const apiRef = useRef<ThreeViewApi>({ cast: () => {}, reset: () => {}, setReeling: () => {}, toggleLights: () => false });
   
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  
   const rodCtrlRef = useRef<RodController | null>(null);
   const boatCtrlRef = useRef<BoatController | null>(null);
   const bobberCtrlRef = useRef<BobberController | null>(null);
@@ -45,6 +47,7 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
 
   const gameGroupRef = useRef<THREE.Group>(new THREE.Group());
   const previewGroupRef = useRef<THREE.Group>(new THREE.Group());
+  const previewModelRef = useRef<THREE.Group | null>(null); // Ref to rotate the loaded model
 
   const objectsRef = useRef<{
     line: THREE.Line | null;
@@ -64,7 +67,6 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     if (!containerRef.current) return;
     const container = containerRef.current;
 
-    // Scene
     const scene = new THREE.Scene();
     scene.add(gameGroupRef.current);
     scene.add(previewGroupRef.current);
@@ -75,7 +77,6 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     camera.lookAt(0, 0, -10);
     cameraRef.current = camera;
 
-    // Renderer
     let renderer: THREE.WebGLRenderer;
     try {
         renderer = new THREE.WebGLRenderer({ 
@@ -97,20 +98,15 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     renderer.toneMappingExposure = 0.5;
     container.appendChild(renderer.domElement);
 
-    // Post Processing
     const composer = new EffectComposer(renderer);
     const renderPass = new RenderPass(scene, camera);
     composer.addPass(renderPass);
 
-    const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight),
-        0.4, 0.4, 0.6
-    );
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.4, 0.6);
     composer.addPass(bloomPass);
     const outputPass = new OutputPass();
     composer.addPass(outputPass);
 
-    // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     scene.add(ambientLight);
 
@@ -121,32 +117,24 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     dirLight.shadow.mapSize.height = 512;
     scene.add(dirLight);
 
-    // --- GAME GROUP ---
+    // --- GAME ASSETS ---
     const sun = new THREE.Vector3();
     const sky = new Sky();
     sky.scale.setScalar(10000);
     gameGroupRef.current.add(sky);
-
-    const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = 10;
-    skyUniforms['rayleigh'].value = 2;
-    skyUniforms['mieCoefficient'].value = 0.005;
-    skyUniforms['mieDirectionalG'].value = 0.8;
-
+    
     const phi = THREE.MathUtils.degToRad(88);
     const theta = THREE.MathUtils.degToRad(180);
     sun.setFromSphericalCoords(1, phi, theta);
     sky.material.uniforms['sunPosition'].value.copy(sun);
     
-    // Water
     const canvas = document.createElement('canvas');
     canvas.width = 256; canvas.height = 256;
     const ctx = canvas.getContext('2d');
     if(ctx) {
-        ctx.fillStyle = '#8080ff'; 
-        ctx.fillRect(0,0,256,256);
+        ctx.fillStyle = '#8080ff'; ctx.fillRect(0,0,256,256);
         for(let i=0; i<5000; i++) {
-            const x = Math.random()*256;
+            const x = Math.random()*256; 
             const y = Math.random()*256;
             ctx.fillStyle = Math.random() > 0.5 ? '#8585ff' : '#7b7bff';
             ctx.fillRect(x,y, 3, 3);
@@ -158,14 +146,9 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     const water = new Water(
         new THREE.PlaneGeometry(10000, 10000),
         {
-            textureWidth: 256, 
-            textureHeight: 256,
-            waterNormals: normalMap,
-            sunDirection: new THREE.Vector3(),
-            sunColor: 0xffffff,
-            waterColor: 0x004966, 
-            distortionScale: 3.7,
-            fog: true
+            textureWidth: 256, textureHeight: 256, waterNormals: normalMap,
+            sunDirection: new THREE.Vector3(), sunColor: 0xffffff, waterColor: 0x004966, 
+            distortionScale: 3.7, fog: true
         }
     );
     water.rotation.x = -Math.PI / 2;
@@ -174,11 +157,11 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     objectsRef.current.water = water;
 
     // Controllers
-    const gameSceneProxy = gameGroupRef.current as any;
-    const boatCtrl = new BoatController(); boatCtrl.addToScene(gameSceneProxy); boatCtrlRef.current = boatCtrl;
-    const rodCtrl = new RodController(); rodCtrl.addToScene(gameSceneProxy); rodCtrlRef.current = rodCtrl;
-    const bobberCtrl = new BobberController(); bobberCtrl.addToScene(gameSceneProxy); bobberCtrlRef.current = bobberCtrl;
-    const spotCtrl = new FishingSpotController(); spotCtrl.addToScene(gameSceneProxy); spotCtrlRef.current = spotCtrl;
+    const proxy = gameGroupRef.current as any;
+    const boatCtrl = new BoatController(); boatCtrl.addToScene(proxy); boatCtrlRef.current = boatCtrl;
+    const rodCtrl = new RodController(); rodCtrl.addToScene(proxy); rodCtrlRef.current = rodCtrl;
+    const bobberCtrl = new BobberController(); bobberCtrl.addToScene(proxy); bobberCtrlRef.current = bobberCtrl;
+    const spotCtrl = new FishingSpotController(); spotCtrl.addToScene(proxy); spotCtrlRef.current = spotCtrl;
 
     const line = new THREE.Line(
         new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,0)]),
@@ -190,7 +173,7 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     const weatherCtrl = new WeatherController(scene, sky, dirLight, ambientLight, water);
     weatherCtrlRef.current = weatherCtrl;
 
-    // --- LOOP ---
+    // Loop
     let animationId: number;
     let lastTime = Date.now();
 
@@ -201,28 +184,25 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
       lastTime = now;
       const time = now * 0.001;
 
-      // PREVIEW MODE
+      // --- PREVIEW MODE RENDER ---
       if (previewGroupRef.current.visible) {
-          const fish = previewGroupRef.current.children[0];
-          if (fish) {
-              fish.rotation.y += 0.01;
-              fish.position.y = Math.sin(time * 1.5) * 0.1; 
+          if (previewModelRef.current) {
+              previewModelRef.current.rotation.y += 0.01; // Rotate model
+              previewModelRef.current.position.y = Math.sin(time * 1.5) * 0.1; // Bob model
           }
+          // Keep studio camera focused
           if (cameraRef.current) cameraRef.current.lookAt(0, 0, 0);
           composer.render();
           return; 
       }
 
-      // GAME MODE
+      // --- GAME MODE RENDER ---
       if (objectsRef.current.water) objectsRef.current.water.material.uniforms['time'].value += 1.0 / 60.0;
-
       if (weatherCtrlRef.current) {
         weatherCtrlRef.current.update(dt);
         const ws = weatherCtrlRef.current.state;
         const isNight = ws.time < 6 || ws.time > 18;
-        const lightsActive = isNight || stateRef.current.manualLights;
-        
-        if (boatCtrlRef.current) boatCtrlRef.current.setNightMode(lightsActive);
+        if (boatCtrlRef.current) boatCtrlRef.current.setNightMode(isNight || stateRef.current.manualLights);
         if (spotCtrlRef.current) spotCtrlRef.current.update(dt, ws);
 
         if (onWeatherUpdate) {
@@ -233,7 +213,6 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
             }
         }
       }
-
       if (rodCtrlRef.current) rodCtrlRef.current.animate(time);
       if (boatCtrlRef.current) boatCtrlRef.current.animate(time);
       if (bobberCtrlRef.current) bobberCtrlRef.current.animate(time);
@@ -246,7 +225,6 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
       if (isCasted && bobberCtrlRef.current && line) {
         bobberCtrlRef.current.position.lerp(targetPos, 0.05);
         bobberCtrlRef.current.position.y = Math.sin(time * 2.5) * 0.04 - 0.05;
-
         const p = line.geometry.attributes.position.array as Float32Array;
         p[0] = rodTipPos.x; p[1] = rodTipPos.y; p[2] = rodTipPos.z;
         p[3] = bobberCtrlRef.current.position.x; p[4] = bobberCtrlRef.current.position.y + 0.3; p[5] = bobberCtrlRef.current.position.z;
@@ -257,7 +235,6 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
          p[3] = rodTipPos.x; p[4] = rodTipPos.y - 1.5; p[5] = rodTipPos.z;
          line.geometry.attributes.position.needsUpdate = true;
       }
-
       composer.render();
     };
     animate();
@@ -273,60 +250,63 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
     return () => {
       window.removeEventListener('resize', handleResize);
       cancelAnimationFrame(animationId);
-      
       if (composer) composer.dispose();
       if (normalMap) normalMap.dispose();
-      
-      scene.traverse((object) => {
-          if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
-              if(object.geometry) object.geometry.dispose();
-              if (object.material) {
-                  if (Array.isArray(object.material)) object.material.forEach((m: any) => m.dispose());
-                  else (object.material as any).dispose();
-              }
-          }
+      scene.traverse((obj) => {
+          if (obj instanceof THREE.Mesh && obj.geometry) obj.geometry.dispose();
       });
-
       renderer.dispose();
-      if (container && renderer.domElement.parentNode === container) {
-           container.removeChild(renderer.domElement);
-      }
+      if (container && renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
     };
   }, []);
 
-  // --- 2. VIEW MODE SWITCH ---
+  // --- 2. ASYNC PREVIEW LOADING SWITCH ---
   useEffect(() => {
       const cam = cameraRef.current;
+      
       if (previewFish) {
+          // Enter Studio Mode
           gameGroupRef.current.visible = false;
           previewGroupRef.current.visible = true;
           previewGroupRef.current.clear();
-          try {
-              const fishModel = generateFishModel(previewFish);
-              fishModel.position.set(0, 0, 0);
-              fishModel.scale.setScalar(1.5);
-              previewGroupRef.current.add(fishModel);
+          previewModelRef.current = null; // Clear Ref
 
-              const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
-              keyLight.position.set(2, 5, 5);
-              previewGroupRef.current.add(keyLight);
+          // Lights
+          const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+          keyLight.position.set(2, 5, 5);
+          previewGroupRef.current.add(keyLight);
+          const rimLight = new THREE.DirectionalLight(0x8888ff, 1.0);
+          rimLight.position.set(-2, -2, -5);
+          previewGroupRef.current.add(rimLight);
 
-              const rimLight = new THREE.DirectionalLight(0x8888ff, 1.0);
-              rimLight.position.set(-2, -2, -5);
-              previewGroupRef.current.add(rimLight);
-
-              if (cam) {
-                  cam.position.set(0, 0, 6);
-                  cam.lookAt(0, 0, 0);
-              }
-          } catch (err) {
-              const errorMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }));
-              previewGroupRef.current.add(errorMesh);
+          // Camera
+          if (cam) {
+              cam.position.set(0, 0, 6);
+              cam.lookAt(0, 0, 0);
           }
+
+          // Async Load
+          loadFishModel(previewFish)
+            .then((model) => {
+                if (previewGroupRef.current.visible) {
+                    previewGroupRef.current.add(model);
+                    previewModelRef.current = model; // Assign ref for animation loop
+                }
+            })
+            .catch(e => {
+                console.error("Failed to load model", e);
+                // Fallback (Red Box) only if even the procedural fallback failed seriously
+                const box = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshBasicMaterial({color:0xff0000, wireframe:true}));
+                previewGroupRef.current.add(box);
+            });
+
       } else {
+          // Exit Studio Mode
           gameGroupRef.current.visible = true;
           previewGroupRef.current.visible = false;
           previewGroupRef.current.clear();
+          previewModelRef.current = null;
+
           if (cam) {
               cam.position.set(0, 5, 10);
               cam.lookAt(0, 0, -10);
@@ -334,22 +314,22 @@ const ThreeView: React.FC<ThreeViewProps> = ({ rodLevel, enchant, boatType, rodS
       }
   }, [previewFish]);
 
-  // Props
+  // Update Props
   useEffect(() => { if (rodCtrlRef.current) rodCtrlRef.current.update(rodLevel, enchant, rodSkin); }, [rodLevel, enchant, rodSkin]);
   useEffect(() => { if (bobberCtrlRef.current) bobberCtrlRef.current.updateEnchant(enchant); }, [enchant]);
   useEffect(() => { if (boatCtrlRef.current) boatCtrlRef.current.update(boatType); }, [boatType]);
 
   // API
-  apiRef.current.cast = (dist) => {
+  apiRef.current.cast = (d) => {
     stateRef.current.isCasted = true;
-    if (rodCtrlRef.current) rodCtrlRef.current.triggerCast();
+    rodCtrlRef.current?.triggerCast();
     if (bobberCtrlRef.current) {
-      bobberCtrlRef.current.setVisible(true);
-      const start = new THREE.Vector3();
-      rodCtrlRef.current?.getTipWorldPosition(start);
-      bobberCtrlRef.current.position.copy(start);
+       bobberCtrlRef.current.setVisible(true);
+       const start = new THREE.Vector3();
+       rodCtrlRef.current?.getTipWorldPosition(start);
+       bobberCtrlRef.current.position.copy(start);
     }
-    stateRef.current.targetPos.set(0, 0, -10 - (dist / 5));
+    stateRef.current.targetPos.set(0, 0, -10 - (d / 5));
   };
   apiRef.current.reset = () => {
     stateRef.current.isCasted = false;
