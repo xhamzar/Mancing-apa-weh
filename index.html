@@ -6,7 +6,7 @@
     <title>Fishing Game 3D</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#0077be" />
-    <!-- Menggunakan Tailwind CDN agar styling tetap jalan tanpa setup CSS build yang rumit -->
+    <!-- Tailwind CDN tetap aman digunakan -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -39,14 +39,12 @@
   </head>
   <body class="bg-sky-400 overflow-hidden w-full h-full text-slate-800">
     <div id="root"></div>
-    <!-- Arahkan langsung ke index.tsx yang ada di folder src -->
+    <!-- Vite akan otomatis mengganti path ini saat build -->
     <script type="module" src="/src/index.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('SW registered'))
-            .catch(err => console.log('SW failed', err));
+          navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW failed', err));
         });
       }
     </script>
